@@ -22,30 +22,56 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 )
 
-// ID implements a PULID - a prefixed ULID.
-type ID string
-
-// The default entropy source.
-var defaultEntropySource *ulid.MonotonicEntropy
-
 func init() {
 	// Seed the default entropy source.
-	// TODO: To improve testability, this package should allow control of entropy sources and the time.Now implementation.
 	defaultEntropySource = ulid.Monotonic(rand.Reader, 0)
 }
 
-// newULID returns a new ULID for time.Now() using the default entropy source.
-func newULID() ulid.ULID {
-	return ulid.MustNew(ulid.Timestamp(time.Now()), defaultEntropySource)
+// ID implements a PULID - a prefixed ULID.
+type ID string
+
+func (id ID) Parts() (prefix, ulid string) {
+	s := string(id)
+	index := strings.Index(s, ":")
+	if index == -1 {
+		return "", s
+	}
+	return s[:index], s[index+1:]
 }
 
-// MustNew returns a new PULID for time.Now() given a prefix. This uses the default entropy source.
-func MustNew(prefix string) ID { return ID(prefix + ":" + fmt.Sprint(newULID())) }
+func (id ID) Compare(other ID) int {
+	return strings.Compare(string(id), string(other))
+}
+
+type ULIDGenerator interface {
+	newULID(string, time.Time) ulid.ULID
+}
+
+type ulidGenerator struct{}
+
+func (ulidGenerator) newULID(prefix string, t time.Time) ulid.ULID {
+	return ulid.MustNew(ulid.Timestamp(t), defaultEntropySource)
+}
+
+// The default entropy source.
+var defaultEntropySource *ulid.MonotonicEntropy
+var defaultULIDGenerator ULIDGenerator = ulidGenerator{}
+
+func SetULIDGenerator(g ULIDGenerator) {
+	defaultULIDGenerator = g
+}
+
+// MustNew returns a new PULID for time.Now() with the defaultULIDGenerator, given
+// given the prefix.
+func MustNew(prefix string) ID {
+	return ID(prefix + ":" + defaultULIDGenerator.newULID(prefix, time.Now()).String())
+}
 
 // UnmarshalGQL implements the graphql.Unmarshaler interface
 func (u *ID) UnmarshalGQL(v interface{}) error {
