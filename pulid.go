@@ -19,6 +19,7 @@ package pulid
 import (
 	"crypto/rand"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -74,17 +75,17 @@ func MustNew(prefix string) ID {
 }
 
 // UnmarshalGQL implements the graphql.Unmarshaler interface
-func (u *ID) UnmarshalGQL(v interface{}) error {
-	return u.Scan(v)
+func (id *ID) UnmarshalGQL(v interface{}) error {
+	return id.Scan(v)
 }
 
 // MarshalGQL implements the graphql.Marshaler interface
-func (u ID) MarshalGQL(w io.Writer) {
-	_, _ = io.WriteString(w, strconv.Quote(string(u)))
+func (id ID) MarshalGQL(w io.Writer) {
+	_, _ = io.WriteString(w, strconv.Quote(string(id)))
 }
 
 // Scan implements the Scanner interface.
-func (u *ID) Scan(src interface{}) error {
+func (id *ID) Scan(src interface{}) error {
 	if src == nil {
 		// Permit empty pulids.
 		return nil
@@ -92,9 +93,9 @@ func (u *ID) Scan(src interface{}) error {
 
 	switch v := src.(type) {
 	case ID:
-		*u = v
+		*id = v
 	case string:
-		*u = ID(v)
+		*id = ID(v)
 	default:
 		return fmt.Errorf("pulid: scan error, unexpected type %T", src)
 	}
@@ -102,10 +103,48 @@ func (u *ID) Scan(src interface{}) error {
 }
 
 // Value implements the driver Valuer interface.
-func (u ID) Value() (driver.Value, error) {
-	return string(u), nil
+func (id ID) Value() (driver.Value, error) {
+	return string(id), nil
 }
 
-func (u ID) String() string {
-	return string(u)
+func (id ID) String() string {
+	return string(id)
+}
+
+// Parse parses an ID, validating the underlying ULID and returning
+// an error in case of failure.
+//
+// ulid.ErrDataSize is returned if the len(ulid) is different from an encoded
+// ULID's length. Invalid encodings produce undefined ULIDs. For a version that
+// returns an error instead, see ParseStrict.
+func Parse(id string) (prefix string, u ulid.ULID, err error) {
+	var ul string
+	prefix, ul = ID(id).Parts()
+
+	if len(prefix) == 0 {
+		return prefix, u, errors.New("pulid: id has no prefix")
+	}
+
+	u, err = ulid.Parse(ul)
+	return prefix, u, err
+}
+
+// ParseStrict parses an ID, validating the underlying ULID and returning
+// an error in case of failure.
+//
+// It is like Parse, but additionally validates that the parsed ULID consists
+// only of valid base32 characters. It is slightly slower than Parse.
+//
+// ulid.ErrDataSize is returned if the len(ulid) is different from an encoded
+// ULID's length. Invalid encodings return ErrInvalidCharacters.
+func ParseStrict(id string) (prefix string, u ulid.ULID, err error) {
+	var ul string
+	prefix, ul = ID(id).Parts()
+
+	if len(prefix) == 0 {
+		return prefix, u, errors.New("publid: id has no prefix")
+	}
+
+	u, err = ulid.ParseStrict(ul)
+	return prefix, u, err
 }
