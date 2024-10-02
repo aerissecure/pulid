@@ -33,6 +33,9 @@ var PrefixToTable = map[string]string{
 
 // IDToType maps a pulid.ID to the underlying table.
 func IDToType(ctx context.Context, id pulid.ID) (string, error) {
+	if id == "" {
+		return "", errors.New("id cannot be empty")
+	}
 	fields := strings.Split(string(id), ":")
 	if len(fields) < 2 {
 		return "", fmt.Errorf("IDToType: id is missing prefix delimiter")
