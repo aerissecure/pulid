@@ -2,12 +2,14 @@ package pulid
 
 import (
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 )
 
 type MockULIDGenerator struct {
+	mu      sync.Mutex
 	entropy map[string]*rand.Rand
 }
 
@@ -15,6 +17,9 @@ type MockULIDGenerator struct {
 // with a fixed seed. A separate predicatable entropy source is used for
 // each unique prefix to keep IDs as fixed as possible.
 func (g *MockULIDGenerator) newULID(prefix string, t time.Time) ulid.ULID {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	if g.entropy == nil {
 		g.entropy = make(map[string]*rand.Rand)
 	}
